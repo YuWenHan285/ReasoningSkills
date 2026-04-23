@@ -1,0 +1,30 @@
+dataset:
+  source: deepmath
+  dataset_name: zwhe99/DeepMath-103K
+  train_split: train
+  test_split: train
+  train_start: 0
+  train_limit: 100
+  test_start: 100
+  test_limit: 20
+
+models:
+  base_model: openai/gpt-4o-mini
+  summarizer_model: openai/gpt-4o
+  inference_model: openai/gpt-4o-mini
+  api_key_env: OPENAI_API_KEY
+  api_base: null
+
+retrieval:
+  backend: bm25
+  top_k: 1
+
+prompting:
+  style: normal
+  budget: null
+
+runtime:
+  temperature: 0.0
+  max_tokens: 4096
+  concurrency: 8
+  workdir: runs/deepmath_bm25

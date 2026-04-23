@@ -1,0 +1,29 @@
+dataset:
+  source: hf
+  dataset_name: nvidia/Nemotron-Competitive-Programming-v1
+  split: train
+  limit: 100
+
+models:
+  base_model: openai/gpt-4o-mini
+  summarizer_model: openai/gpt-4o
+  inference_model: openai/gpt-4o-mini
+  api_key_env: OPENAI_API_KEY
+  api_base: null
+
+retrieval:
+  backend: hybrid
+  top_k: 5
+  dense_model_name: BAAI/bge-m3
+  bm25_weight: 0.5
+  dense_weight: 0.5
+
+prompting:
+  style: draft
+  budget: null
+
+runtime:
+  temperature: 0.0
+  max_tokens: 8192
+  concurrency: 8
+  workdir: runs/code_hybrid
