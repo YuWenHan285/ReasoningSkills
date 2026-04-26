@@ -1,0 +1,2 @@
+[console_scripts]
+trs = trs.cli:app

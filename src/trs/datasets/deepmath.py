@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-from typing import Iterable
-
-from datasets import Dataset, load_dataset
+from datasets import load_dataset
 
 from trs.schemas import DatasetExample
 
@@ -27,11 +25,11 @@ def load_deepmath(
     start: int = 0,
     limit: int | None = None,
 ) -> list[DatasetExample]:
-    ds = load_dataset(dataset_name, split=split)
+    ds = load_dataset(dataset_name, split=split, streaming=True)
     if start:
-        ds = ds.select(range(start, len(ds)))
+        ds = ds.skip(start)
     if limit is not None:
-        ds = ds.select(range(min(limit, len(ds))))
+        ds = ds.take(limit)
 
     examples: list[DatasetExample] = []
     for i, row in enumerate(ds):
@@ -39,7 +37,7 @@ def load_deepmath(
         answer = _pick(row, DEEP_MATH_CANDIDATE_COLUMNS["answer"])
         if not question:
             continue
-        ex_id = str(row.get("id", row.get("uuid", f"deepmath-{i}")))
+        ex_id = str(row.get("id", row.get("uuid", f"deepmath-{start + i}")))
         metadata = {k: v for k, v in row.items() if k not in {"question", "prompt", "problem", "final_answer", "answer", "solution"}}
         examples.append(DatasetExample(id=ex_id, question=question, answer=answer, metadata=metadata))
     return examples

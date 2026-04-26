@@ -5,8 +5,9 @@ import json
 import os
 from typing import Any
 
-from litellm import acompletion, aembedding
+from openai import AsyncOpenAI
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
+
 
 
 class LLMClient:
@@ -16,6 +17,13 @@ class LLMClient:
         self.api_key = api_key
         self.temperature = temperature
         self.max_tokens = max_tokens
+        self._client: AsyncOpenAI | None = None
+
+    @property
+    def client(self) -> AsyncOpenAI:
+        if self._client is None:
+            self._client = AsyncOpenAI(api_key=self.api_key, base_url=self.api_base)
+        return self._client
 
     @retry(
         reraise=True,
@@ -36,29 +44,30 @@ class LLMClient:
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": user_prompt})
-        response = await acompletion(
-            model=self.model,
-            api_base=self.api_base,
-            api_key=self.api_key,
-            messages=messages,
-            temperature=kwargs.get("temperature", self.temperature),
-            max_tokens=kwargs.get("max_tokens", self.max_tokens),
-            response_format=response_format,
-            extra_body=extra_body,
-            stream=False,
-        )
+        request: dict[str, Any] = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": kwargs.get("temperature", self.temperature),
+            "stream": False,
+        }
+        max_tokens = kwargs.get("max_tokens", self.max_tokens)
+        if max_tokens is not None:
+            request["max_tokens"] = max_tokens
+        if response_format is not None:
+            request["response_format"] = response_format
+        if extra_body is not None:
+            request["extra_body"] = extra_body
+
+        response = await self.client.chat.completions.create(**request)
         choice = response.choices[0]
-        text = choice.message.content if hasattr(choice, "message") else choice["message"]["content"]
-        usage = getattr(response, "usage", None)
-        if usage is None:
-            usage_dict: dict[str, Any] = {}
-        else:
-            usage_dict = usage.model_dump() if hasattr(usage, "model_dump") else dict(usage)
+        text = choice.message.content or ""
+        usage = response.usage
+        usage_dict = usage.model_dump() if usage is not None else {}
         return {
             "text": text,
-            "finish_reason": getattr(choice, "finish_reason", None),
+            "finish_reason": choice.finish_reason,
             "usage": usage_dict,
-            "raw": response.model_dump() if hasattr(response, "model_dump") else dict(response),
+            "raw": response.model_dump(),
         }
 
 
@@ -68,6 +77,13 @@ class EmbeddingClient:
         self.api_base = api_base
         self.api_key = api_key
         self.dimensions = dimensions
+        self._client: AsyncOpenAI | None = None
+
+    @property
+    def client(self) -> AsyncOpenAI:
+        if self._client is None:
+            self._client = AsyncOpenAI(api_key=self.api_key, base_url=self.api_base)
+        return self._client
 
     @retry(
         reraise=True,
@@ -76,15 +92,15 @@ class EmbeddingClient:
         retry=retry_if_exception_type(Exception),
     )
     async def embed_batch(self, texts: list[str]) -> list[list[float]]:
-        response = await aembedding(
-            model=self.model,
-            api_base=self.api_base,
-            api_key=self.api_key,
-            input=texts,
-            dimensions=self.dimensions,
-        )
-        data = response.data if hasattr(response, "data") else response["data"]
-        return [item.embedding if hasattr(item, "embedding") else item["embedding"] for item in data]
+        request: dict[str, Any] = {
+            "model": self.model,
+            "input": texts,
+        }
+        if self.dimensions is not None:
+            request["dimensions"] = self.dimensions
+
+        response = await self.client.embeddings.create(**request)
+        return [item.embedding for item in response.data]
 
 
 async def gather_limited(coros: list, concurrency: int) -> list[Any]:
