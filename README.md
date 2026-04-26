@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  Generate trajectories • Extract skill cards • Retrieve relevant skills • Inject them into prompts
+  Generate trajectories • Extract learned heuristics • Retrieve relevant skills • Inject them into prompts
 </p>
 
 <p align="center">
@@ -22,7 +22,7 @@
 
 - End-to-end workflow for skill-guided reasoning
 - API-first design for hosted or OpenAI-compatible models
-- Structured skill extraction with compact skill cards
+- Structured skill extraction with reusable heuristics and retrieval keywords
 - Multiple retrieval backends:
   - BM25
   - Dense nearest-neighbor search
@@ -73,7 +73,7 @@ trs generate \
   --output-path runs/demo/01_generations.jsonl
 ```
 
-### 2. Extract skill cards
+### 2. Extract learned heuristics
 
 ```bash
 trs extract \
@@ -121,7 +121,7 @@ The pipeline is organized into three stages:
    Generate reasoning traces from a dataset using a base model.
 
 2. **Skill Extraction**  
-   Convert trajectories into structured skill cards and retrieval keywords using a stronger model.
+   Convert trajectories into learned heuristics and retrieval keywords using a stronger model.
 
 3. **Skill-Guided Inference**  
    Retrieve relevant skills for a new query and inject them into the model prompt.
@@ -196,7 +196,7 @@ runs/
 ```
 
 - `01_generations.jsonl`: raw model trajectories
-- `02_skills.jsonl`: extracted skill cards and keywords
+- `02_skills.jsonl`: extracted learned heuristics and retrieval keywords
 - `index_*`: retrieval artifacts
 - `03_infer.jsonl`: retrieved skills and final model outputs
 
@@ -205,7 +205,7 @@ runs/
 ## Notes
 
 - Start with a small subset before scaling up
-- Keep skill cards short and reusable
+- Keep learned heuristics short and reusable
 - Use small `top-k` values to avoid prompt inflation
 - Inspect retrieval quality early
 

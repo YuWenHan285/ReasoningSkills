@@ -9,6 +9,45 @@ from openai import AsyncOpenAI
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 
+def _openai_model_name(model: str) -> str:
+    if model.startswith("openai/"):
+        return model.removeprefix("openai/")
+    return model
+
+
+def _message_extra(message: Any, key: str) -> Any:
+    value = getattr(message, key, None)
+    if value is not None:
+        return value
+    model_extra = getattr(message, "model_extra", None)
+    if isinstance(model_extra, dict):
+        return model_extra.get(key)
+    if isinstance(message, dict):
+        return message.get(key)
+    return None
+
+
+def _message_text(message: Any) -> tuple[str, str | None]:
+    content = getattr(message, "content", None)
+    if content is None and isinstance(message, dict):
+        content = message.get("content")
+    reasoning_content = _message_extra(message, "reasoning_content")
+
+    text = content or ""
+    if reasoning_content:
+        text = f"<think>\n{reasoning_content}\n</think>\n{text}"
+    return text, reasoning_content
+
+
+def _compact_completion_raw(response: Any, choice: Any, reasoning_content: str | None) -> dict[str, Any]:
+    raw: dict[str, Any] = {
+        "model": getattr(response, "model", None),
+        "created": getattr(response, "created", None),
+    }
+    if reasoning_content:
+        raw["has_reasoning_content"] = True
+    return {key: value for key, value in raw.items() if value is not None}
+
 
 class LLMClient:
     def __init__(self, *, model: str, api_base: str | None = None, api_key: str | None = None, temperature: float = 0.0, max_tokens: int | None = None) -> None:
@@ -45,7 +84,7 @@ class LLMClient:
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": user_prompt})
         request: dict[str, Any] = {
-            "model": self.model,
+            "model": _openai_model_name(self.model),
             "messages": messages,
             "temperature": kwargs.get("temperature", self.temperature),
             "stream": False,
@@ -60,14 +99,14 @@ class LLMClient:
 
         response = await self.client.chat.completions.create(**request)
         choice = response.choices[0]
-        text = choice.message.content or ""
+        text, reasoning_content = _message_text(choice.message)
         usage = response.usage
         usage_dict = usage.model_dump() if usage is not None else {}
         return {
             "text": text,
             "finish_reason": choice.finish_reason,
             "usage": usage_dict,
-            "raw": response.model_dump(),
+            "raw": _compact_completion_raw(response, choice, reasoning_content),
         }
 
 
@@ -93,7 +132,7 @@ class EmbeddingClient:
     )
     async def embed_batch(self, texts: list[str]) -> list[list[float]]:
         request: dict[str, Any] = {
-            "model": self.model,
+            "model": _openai_model_name(self.model),
             "input": texts,
         }
         if self.dimensions is not None:
@@ -111,17 +150,6 @@ async def gather_limited(coros: list, concurrency: int) -> list[Any]:
             return await coro
 
     return await asyncio.gather(*[_wrapped(c) for c in coros])
-
-
-class JSONParser:
-    @staticmethod
-    def parse(text: str) -> dict[str, Any]:
-        text = text.strip()
-        if text.startswith("```"):
-            text = text.strip("`")
-            if text.startswith("json"):
-                text = text[4:].strip()
-        return json.loads(text)
 
 
 def env_or_value(value: str | None, env_name: str | None) -> str | None:

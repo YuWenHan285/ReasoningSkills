@@ -6,3 +6,5 @@ AGENTS.md
 .env
 data
 include
+runs/
+import_log.txt

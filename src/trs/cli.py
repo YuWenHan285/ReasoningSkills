@@ -19,6 +19,13 @@ from trs.utils.io import append_jsonl, read_jsonl, write_jsonl
 
 app = typer.Typer(add_completion=False, no_args_is_help=True)
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_DOTENV = PROJECT_ROOT / ".env"
+
+
+def _load_project_dotenv() -> None:
+    load_dotenv(PROJECT_DOTENV)
+
 
 def _load_examples(
     *,
@@ -46,6 +53,10 @@ def _make_client(model: str, api_base: str | None, api_key: str | None, temperat
     return LLMClient(model=model, api_base=api_base, api_key=api_key, temperature=temperature, max_tokens=max_tokens)
 
 
+def _resolve_api_base(api_base: str | None, api_base_env: str | None = "OPENAI_API_BASE") -> str | None:
+    return env_or_value(api_base, api_base_env)
+
+
 @app.command()
 def generate(
     source: str = typer.Option("deepmath", help="deepmath | hf | local"),
@@ -56,6 +67,7 @@ def generate(
     limit: Optional[int] = typer.Option(None),
     model: str = typer.Option(...),
     api_base: Optional[str] = typer.Option(None),
+    api_base_env: Optional[str] = typer.Option("OPENAI_API_BASE"),
     api_key: Optional[str] = typer.Option(None),
     api_key_env: Optional[str] = typer.Option("OPENAI_API_KEY"),
     output_path: str = typer.Option(...),
@@ -65,9 +77,9 @@ def generate(
     concurrency: int = typer.Option(8),
 ):
     """Stage 1: generate base trajectories using the base model."""
-    load_dotenv()
+    _load_project_dotenv()
     examples = _load_examples(source=source, dataset_name=dataset_name, split=split, path=path, limit=limit, start=start)
-    client = _make_client(model, api_base, env_or_value(api_key, api_key_env), temperature, max_tokens)
+    client = _make_client(model, _resolve_api_base(api_base, api_base_env), env_or_value(api_key, api_key_env), temperature, max_tokens)
     asyncio.run(
         generate_trajectories(
             examples=examples,
@@ -103,6 +115,7 @@ def extract(
     generations_path: str = typer.Option(...),
     model: str = typer.Option(...),
     api_base: Optional[str] = typer.Option(None),
+    api_base_env: Optional[str] = typer.Option("OPENAI_API_BASE"),
     api_key: Optional[str] = typer.Option(None),
     api_key_env: Optional[str] = typer.Option("OPENAI_API_KEY"),
     output_path: str = typer.Option(...),
@@ -110,10 +123,10 @@ def extract(
     max_tokens: Optional[int] = typer.Option(None),
     concurrency: int = typer.Option(8),
 ):
-    """Stage 2: distill skill cards and keywords with a stronger model."""
-    load_dotenv()
+    """Stage 2: distill reusable heuristics and retrieval keywords with a stronger model."""
+    _load_project_dotenv()
     records = load_generation_records(generations_path)
-    client = _make_client(model, api_base, env_or_value(api_key, api_key_env), temperature, max_tokens)
+    client = _make_client(model, _resolve_api_base(api_base, api_base_env), env_or_value(api_key, api_key_env), temperature, max_tokens)
     asyncio.run(extract_skills(records=records, llm=client, output_path=output_path, concurrency=concurrency))
     typer.echo(f"Wrote skills to {output_path}")
 
@@ -134,6 +147,7 @@ def infer(
     budget: Optional[int] = typer.Option(None),
     model: str = typer.Option(...),
     api_base: Optional[str] = typer.Option(None),
+    api_base_env: Optional[str] = typer.Option("OPENAI_API_BASE"),
     api_key: Optional[str] = typer.Option(None),
     api_key_env: Optional[str] = typer.Option("OPENAI_API_KEY"),
     output_path: str = typer.Option(...),
@@ -143,12 +157,12 @@ def infer(
     bm25_weight: float = typer.Option(0.5),
     dense_weight: float = typer.Option(0.5),
 ):
-    """Stage 3: retrieve skill cards and inject them into the prompt."""
-    load_dotenv()
+    """Stage 3: retrieve reusable heuristics and inject them into the prompt."""
+    _load_project_dotenv()
     examples = _load_examples(source=source, dataset_name=dataset_name, split=split, path=path, limit=limit, start=start)
     skills = load_skills(skills_path)
     retriever = SkillRetriever(skills, backend=retrieval_backend, dense_model_name=dense_model_name)
-    client = _make_client(model, api_base, env_or_value(api_key, api_key_env), temperature, max_tokens)
+    client = _make_client(model, _resolve_api_base(api_base, api_base_env), env_or_value(api_key, api_key_env), temperature, max_tokens)
     asyncio.run(
         run_inference(
             examples=examples,
@@ -179,6 +193,7 @@ def end_to_end_math(
     summarizer_model: str = typer.Option(...),
     inference_model: str = typer.Option(...),
     api_base: Optional[str] = typer.Option(None),
+    api_base_env: Optional[str] = typer.Option("OPENAI_API_BASE"),
     api_key: Optional[str] = typer.Option(None),
     api_key_env: Optional[str] = typer.Option("OPENAI_API_KEY"),
     workdir: str = typer.Option("runs/deepmath_demo"),
@@ -189,17 +204,18 @@ def end_to_end_math(
     concurrency: int = typer.Option(8),
 ):
     """Convenience runner for the paper's math TRS pipeline."""
-    load_dotenv()
+    _load_project_dotenv()
     root = Path(workdir)
     root.mkdir(parents=True, exist_ok=True)
+    resolved_api_base = _resolve_api_base(api_base, api_base_env)
     resolved_api_key = env_or_value(api_key, api_key_env)
 
     train_examples = load_deepmath(dataset_name=dataset_name, split=train_split, start=train_start, limit=train_limit)
     test_examples = load_deepmath(dataset_name=dataset_name, split=test_split, start=test_start, limit=test_limit)
 
-    base_client = _make_client(base_model, api_base, resolved_api_key, temperature, max_tokens)
-    summarizer_client = _make_client(summarizer_model, api_base, resolved_api_key, 0.0, max_tokens)
-    inference_client = _make_client(inference_model, api_base, resolved_api_key, temperature, max_tokens)
+    base_client = _make_client(base_model, resolved_api_base, resolved_api_key, temperature, max_tokens)
+    summarizer_client = _make_client(summarizer_model, resolved_api_base, resolved_api_key, 0.0, max_tokens)
+    inference_client = _make_client(inference_model, resolved_api_base, resolved_api_key, temperature, max_tokens)
 
     raw_path = str(root / "01_generations.jsonl")
     scored_path = str(root / "02_generations_scored.jsonl")

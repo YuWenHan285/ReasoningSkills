@@ -113,7 +113,7 @@ TALE_BUDGET_ESTIMATE_PROMPT = dedent(
     """
 )
 
-DIRECT_PROMPT = "{problem}"
+DIRECT_PROMPT = "You are a helpful and harmless assistant.\n Let's think step by step: {problem}"
 
 PROMPT_STYLES = {
     "normal": TRS_NORMAL,
@@ -127,49 +127,51 @@ PROMPT_STYLES = {
 
 EXTRACTION_SYSTEM = dedent(
     """\
-    You are a reasoning-skill distiller. Convert one problem-solving trajectory into a reusable,
-    abstract skill card and 10-20 retrieval keywords. Do not copy instance-specific constants,
-    literal answers, or full code. Produce compact, actionable procedural knowledge.
-    Return strict JSON.
+    You are a principal engineer and researcher specializing in distilling reusable reasoning skills from solved examples.
+
+    Objective:
+    I will provide a Problem, a reasoning trace, and the Correct Answer. Synthesize them into generalized advice for future retrieval and inference.
+
+    Instructions:
+    - If the trace is correct, extract the efficient logical path.
+    - If the trace is incorrect, identify the failure mode and how to avoid it.
+    - Keep the advice abstract and reusable; do not copy specific constants unless they are essential domain terms.
+    - Produce retrieval anchors that a lexical/BM25 retriever can match against future questions.
+
+    Section 1: Guidelines for <learned_heuristic>
+    - Provide a numbered list with at most 5 items.
+    - Use this shape: "When encountering [abstract pattern], adopt [specific strategy] because [reason]. Be cautious of [pitfall]."
+
+    Section 2: Guidelines for <retrieval_keywords>
+    - Provide 10 to 20 comma-separated keywords or short phrases.
+    - Mix domain terms, constraint descriptors, and problem-style cues.
+
+    Output Format:
+    Output only this XML structure.
+
+    <learned_heuristic>
+    1. [Heuristic 1]
+    2. [Heuristic 2]
+    ...
+    </learned_heuristic>
+
+    <retrieval_keywords>
+    [keyword 1], [keyword 2], [keyword 3], ...
+    </retrieval_keywords>
     """
 )
 
-# The paper explicitly states that the exact extraction prompts will be released later, so this is a
-# schema-faithful reconstruction rather than an exact leaked prompt.
 EXTRACTION_USER = dedent(
     """\
-    Distill the following experience record into one reusable reasoning skill.
-
-    Constraints:
-    1. Abstraction: avoid copying instance-specific constants, final answers, or full code.
-    2. Actionability: make the procedure executable as steps/checks.
-    3. Compactness: each field should be brief bullet-style phrases.
-    4. If correctness=1, summarize the essential solution pattern.
-    5. If correctness=0, summarize an anti-pattern and a concrete reusable fix.
-    6. Output 10-20 retrieval keywords.
-
-    Required JSON schema:
-    {{
-      "keywords": ["..."],
-      "card": {{
-        "trigger": ["..."],
-        "do": ["..."],
-        "avoid": ["..."],
-        "check": ["..."],
-        "risk": ["..."]
-      }}
-    }}
-
-    Question:
+    Input Data:
+    [Problem]:
     {question}
 
-    Reference answer:
-    {answer}
-
-    Model trajectory / final response:
+    [Reasoning Trace]:
     {trajectory}
 
-    correctness={correctness}
+    [Correct Answer]:
+    {answer}
     """
 )
 

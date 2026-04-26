@@ -63,7 +63,7 @@ def format_solving_hints(hits: list[tuple[ExtractedSkill, float, str]]) -> str:
         return ""
     blocks = []
     for idx, (skill, _score, _backend) in enumerate(hits, start=1):
-        blocks.append(f"Skill {idx}.\n{skill.card.render()}")
+        blocks.append(f"Skill {idx}.\n{skill.value_text()}")
     return "\n\n".join(blocks)
 
 
@@ -111,8 +111,9 @@ async def run_inference(
                     "source_example_id": skill.source_example_id,
                     "score": score,
                     "backend": backend,
-                    "keywords": skill.keywords,
-                    "card": skill.card.model_dump(),
+                    "key_text": skill.key_text(),
+                    "retrieval_keywords": skill.retrieval_keywords,
+                    "learned_heuristic": skill.learned_heuristic,
                 }
                 for skill, score, backend in hits
             ],
