@@ -8,3 +8,4 @@ data
 include
 runs/
 import_log.txt
+*.egg-info
